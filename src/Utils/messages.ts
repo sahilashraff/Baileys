@@ -591,6 +591,8 @@ export const generateWAMessageContent = async (
 		}
 	} else if (hasNonNullishProperty(message, 'requestPhoneNumber')) {
 		m.requestPhoneNumberMessage = {}
+	} else if (hasNonNullishProperty(message, 'interactiveMessage')) {
+		m.interactiveMessage = message.interactiveMessage
 	} else if (hasNonNullishProperty(message, 'limitSharing')) {
 		m.protocolMessage = {
 			type: proto.Message.ProtocolMessage.Type.LIMIT_SHARING,
@@ -603,6 +605,77 @@ export const generateWAMessageContent = async (
 		}
 	} else {
 		m = await prepareWAMessageMedia(message, options)
+	}
+
+	// Post-processing: wrap content in buttonsMessage / templateMessage / listMessage if applicable
+	const ButtonType = proto.Message.ButtonsMessage.HeaderType
+	const _msg = message as any
+	if (_msg.buttons && _msg.buttons.length) {
+		const buttonsMessage: proto.Message.IButtonsMessage = {
+			buttons: _msg.buttons.map((b: any) => ({
+				...b,
+				type: proto.Message.ButtonsMessage.Button.Type.RESPONSE
+			}))
+		}
+		if (_msg.text) {
+			buttonsMessage.contentText = _msg.text
+			buttonsMessage.headerType = ButtonType.EMPTY
+		} else {
+			if (_msg.caption) {
+				buttonsMessage.contentText = _msg.caption
+			}
+
+			const type = Object.keys(m)[0]?.replace('Message', '').toUpperCase()
+			if (type && (ButtonType as any)[type] !== undefined) {
+				buttonsMessage.headerType = (ButtonType as any)[type]
+			}
+
+			Object.assign(buttonsMessage, m)
+		}
+
+		if (_msg.footer) {
+			buttonsMessage.footerText = _msg.footer
+		}
+
+		m = { buttonsMessage }
+	} else if (_msg.templateButtons && _msg.templateButtons.length) {
+		const msg: proto.Message.TemplateMessage.IHydratedFourRowTemplate = {
+			hydratedButtons: _msg.templateButtons
+		}
+
+		if (_msg.text) {
+			msg.hydratedContentText = _msg.text
+		} else {
+			if (_msg.caption) {
+				msg.hydratedContentText = _msg.caption
+			}
+
+			Object.assign(msg, m)
+		}
+
+		if (_msg.footer) {
+			msg.hydratedFooterText = _msg.footer
+		}
+
+		m = {
+			templateMessage: {
+				fourRowTemplate: msg,
+				hydratedTemplate: msg
+			}
+		}
+	}
+
+	if (_msg.sections && _msg.sections.length) {
+		const listMessage: proto.Message.IListMessage = {
+			sections: _msg.sections,
+			buttonText: _msg.buttonText,
+			title: _msg.title,
+			footerText: _msg.footer,
+			description: _msg.text,
+			listType: proto.Message.ListMessage.ListType.SINGLE_SELECT
+		}
+
+		m = { listMessage }
 	}
 
 	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce) {
@@ -1094,4 +1167,23 @@ export const assertMediaContent = (content: proto.IMessage | null | undefined) =
 	}
 
 	return mediaContent
+}
+export const patchMessageForMdIfRequired = (message: proto.IMessage): proto.IMessage => {
+	const requiresPatch = !!(
+		message.buttonsMessage ||
+		message.listMessage ||
+		message.interactiveMessage
+	)
+
+	if (requiresPatch) {
+		message = {
+			documentWithCaptionMessage: {
+				message: {
+					...message
+				}
+			}
+		}
+	}
+
+	return message
 }

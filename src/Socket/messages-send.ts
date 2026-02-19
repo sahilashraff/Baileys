@@ -31,6 +31,7 @@ import {
 	MessageRetryManager,
 	normalizeMessageContent,
 	parseAndInjectE2ESessions,
+	patchMessageForMdIfRequired,
 	unixTimestampSeconds
 } from '../Utils'
 import { getUrlInfo } from '../Utils/link-preview'
@@ -912,11 +913,11 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 
 				const encodedMessageToSend = isMe
 					? encodeWAMessage({
-							deviceSentMessage: {
-								destinationJid,
-								message
-							}
-						})
+						deviceSentMessage: {
+							destinationJid,
+							message
+						}
+					})
 					: encodeWAMessage(message)
 
 				const { type, ciphertext: encryptedContent } = await signalRepository.encryptMessage({
@@ -980,7 +981,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			if (shouldIncludeDeviceIdentity) {
-				;(stanza.content as BinaryNode[]).push({
+				; (stanza.content as BinaryNode[]).push({
 					tag: 'device-identity',
 					attrs: {},
 					content: encodeSignedDeviceIdentity(authState.creds.account!, true)
@@ -1005,7 +1006,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					}
 					const reportingNode = await getMessageReportingToken(encoded, reportingMessage, reportingKey)
 					if (reportingNode) {
-						;(stanza.content as BinaryNode[]).push(reportingNode)
+						; (stanza.content as BinaryNode[]).push(reportingNode)
 						logger.trace({ jid }, 'added reporting token to message')
 					}
 				} catch (error: any) {
@@ -1019,7 +1020,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			const tcTokenBuffer = contactTcTokenData[destinationJid]?.token
 
 			if (tcTokenBuffer) {
-				;(stanza.content as BinaryNode[]).push({
+				; (stanza.content as BinaryNode[]).push({
 					tag: 'tctoken',
 					attrs: {},
 					content: tcTokenBuffer
@@ -1027,7 +1028,38 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 			}
 
 			if (additionalNodes && additionalNodes.length > 0) {
-				;(stanza.content as BinaryNode[]).push(...additionalNodes)
+				; (stanza.content as BinaryNode[]).push(...additionalNodes)
+			}
+
+			// Auto-detect button/list/interactive messages and inject biz node
+			const createButtonNode = (msg: proto.IMessage) => {
+				if (msg.listMessage) {
+					return [{
+						tag: 'list',
+						attrs: { type: 'product_list', v: '2' }
+					}]
+				}
+
+				if (msg.buttonsMessage || msg.interactiveMessage?.nativeFlowMessage) {
+					return [{
+						tag: 'interactive',
+						attrs: { type: 'native_flow', v: '1' },
+						content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+					}]
+				}
+
+				return null
+			}
+
+			const innerMessage = message.documentWithCaptionMessage?.message || message
+			const buttonContent = createButtonNode(innerMessage)
+			if (buttonContent) {
+				; (stanza.content as BinaryNode[]).push({
+					tag: 'biz',
+					attrs: {},
+					content: buttonContent
+				})
+				logger.debug({ jid }, 'adding biz node for buttons message')
 			}
 
 			logger.debug({ msgId }, `sending message to ${participants.length} devices`)
@@ -1275,6 +1307,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 						}
 					} as BinaryNode)
 				}
+
+				// Apply documentWithCaptionMessage patch for buttons/list/interactive messages
+				fullMsg.message = patchMessageForMdIfRequired(fullMsg.message!)
 
 				await relayMessage(jid, fullMsg.message!, {
 					messageId: fullMsg.key.id!,
