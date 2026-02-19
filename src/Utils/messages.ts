@@ -678,33 +678,6 @@ export const generateWAMessageContent = async (
 		m = { listMessage }
 	}
 
-	// Convert high-level interactiveButtons format to interactiveMessage.nativeFlowMessage
-	if (_msg.interactiveButtons && _msg.interactiveButtons.length) {
-		const interactiveMessage: proto.Message.IInteractiveMessage = {
-			nativeFlowMessage: {
-				buttons: _msg.interactiveButtons.map((btn: any) => ({
-					name: btn.name || 'quick_reply',
-					buttonParamsJson: btn.buttonParamsJson
-				}))
-			}
-		}
-
-		if (_msg.title || _msg.subtitle) {
-			interactiveMessage.header = {
-				title: _msg.title || _msg.subtitle || ''
-			}
-		}
-
-		if (_msg.text) {
-			interactiveMessage.body = { text: _msg.text }
-		}
-
-		if (_msg.footer) {
-			interactiveMessage.footer = { text: _msg.footer }
-		}
-
-		m = { interactiveMessage }
-	}
 
 	if (hasOptionalProperty(message, 'viewOnce') && !!message.viewOnce) {
 		m = { viewOnceMessage: { message: m } }
