@@ -1170,23 +1170,20 @@ export const assertMediaContent = (content: proto.IMessage | null | undefined) =
 	return mediaContent
 }
 export const patchMessageForMdIfRequired = (message: proto.IMessage): proto.IMessage => {
+	// Only wrap buttonsMessage and listMessage in documentWithCaptionMessage
+	// interactiveMessage should NOT be wrapped — it breaks WhatsApp Web rendering
 	const requiresPatch = !!(
 		message.buttonsMessage ||
-		message.listMessage ||
-		message.interactiveMessage
+		message.listMessage
 	)
 
 	if (requiresPatch) {
-		const { messageContextInfo, ...rest } = message as any
 		message = {
 			documentWithCaptionMessage: {
 				message: {
-					...rest
+					...message
 				}
-			},
-			// Keep messageContextInfo (with messageSecret) at top level
-			// so WhatsApp Web can find it for decryption
-			...(messageContextInfo ? { messageContextInfo } : {})
+			}
 		}
 	}
 
