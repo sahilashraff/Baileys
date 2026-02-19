@@ -1059,6 +1059,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {},
 					content: buttonContent
 				})
+				// Force stanza type to 'text' for button/list/interactive messages
+				// WhatsApp rejects these message types if sent with type='media'
+				stanza.attrs.type = 'text'
 				logger.debug({ jid }, 'adding biz node for buttons message')
 			}
 
