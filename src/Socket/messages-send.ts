@@ -1059,6 +1059,14 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					attrs: {},
 					content: buttonContent
 				})
+				// For private (non-group) chats, also add bot node
+				// WhatsApp requires this for interactive messages to render in 1:1 chats
+				if (!isGroup) {
+					; (stanza.content as BinaryNode[]).push({
+						tag: 'bot',
+						attrs: { biz_bot: '1' }
+					})
+				}
 				// Force stanza type to 'text' for button/list/interactive messages
 				// WhatsApp rejects these message types if sent with type='media'
 				stanza.attrs.type = 'text'
