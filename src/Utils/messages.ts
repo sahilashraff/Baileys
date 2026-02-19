@@ -1177,12 +1177,16 @@ export const patchMessageForMdIfRequired = (message: proto.IMessage): proto.IMes
 	)
 
 	if (requiresPatch) {
+		const { messageContextInfo, ...rest } = message as any
 		message = {
 			documentWithCaptionMessage: {
 				message: {
-					...message
+					...rest
 				}
-			}
+			},
+			// Keep messageContextInfo (with messageSecret) at top level
+			// so WhatsApp Web can find it for decryption
+			...(messageContextInfo ? { messageContextInfo } : {})
 		}
 	}
 
