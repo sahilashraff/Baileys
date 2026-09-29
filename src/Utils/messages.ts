@@ -183,10 +183,11 @@ export const prepareWAMessageMedia = async (
 		)
 
 		const fileSha256B64 = fileSha256.toString('base64')
-		const { mediaUrl, directPath } = await options.upload(filePath, {
+		const { directPath, thumbnailDirectPath, thumbnailSha256 } = await options.upload(filePath, {
 			fileEncSha256B64: fileSha256B64,
 			mediaType: mediaType,
-			timeoutMs: options.mediaUploadTimeoutMs
+			timeoutMs: options.mediaUploadTimeoutMs,
+			newsletter: true
 		})
 
 		await fs.unlink(filePath)
@@ -194,8 +195,10 @@ export const prepareWAMessageMedia = async (
 		const obj = WAProto.Message.fromObject({
 			// todo: add more support here
 			[`${mediaType}Message`]: (MessageTypeProto as any)[mediaType].fromObject({
-				url: mediaUrl,
+				// channels address media by direct path only
 				directPath,
+				thumbnailDirectPath,
+				thumbnailSha256: thumbnailSha256 ? Buffer.from(thumbnailSha256, 'base64') : undefined,
 				fileSha256,
 				fileLength,
 				...uploadData,
@@ -566,6 +569,11 @@ export const generateWAMessageContent = async (
 		m.messageContextInfo = {
 			// encKey
 			messageSecret: message.poll.messageSecret || randomBytes(32)
+		}
+
+		// channel polls are sent in plain text and rejected when they carry a secret
+		if (options.jid && isJidNewsletter(options.jid)) {
+			m.messageContextInfo = undefined
 		}
 
 		const pollCreationMessage = {

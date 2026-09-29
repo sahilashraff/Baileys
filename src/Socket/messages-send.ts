@@ -58,6 +58,7 @@ import {
 	isJidBot,
 	isJidGroup,
 	isJidMetaAI,
+	isJidNewsletter,
 	isLidUser,
 	isPnUser,
 	jidDecode,
@@ -697,9 +698,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				const bytes = encodeNewsletterMessage(patched as proto.IMessage)
 				binaryNodeContent.push({
 					tag: 'plaintext',
-					attrs: {},
+					// the server rejects channel media without its type
+					attrs: mediaType ? { mediatype: mediaType } : {},
 					content: bytes
 				})
+				if (additionalNodes && additionalNodes.length > 0) {
+					binaryNodeContent.push(...additionalNodes)
+				}
 				const stanza: BinaryNode = {
 					tag: 'message',
 					attrs: {
@@ -1412,9 +1417,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				} else if (isPollMessage) {
 					additionalNodes.push({
 						tag: 'meta',
-						attrs: {
-							polltype: 'creation'
-						}
+						attrs: isJidNewsletter(jid) ? { polltype: 'creation', contenttype: 'text' } : { polltype: 'creation' }
 					} as BinaryNode)
 				} else if (isEventMsg) {
 					additionalNodes.push({
